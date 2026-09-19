@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 import urllib.request
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal
@@ -93,7 +94,7 @@ def validate_violet_db(db_path: Path) -> None:
     if not db_path.is_file():
         raise FileNotFoundError(f"DB 파일을 찾을 수 없습니다: {db_path}")
     uri = f"file:{db_path.as_posix()}?mode=ro"
-    with sqlite3.connect(uri, uri=True) as db:
+    with closing(sqlite3.connect(uri, uri=True)) as db:
         row = db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='HitomiColumnModel'"
         ).fetchone()
@@ -112,7 +113,7 @@ def load_gallery_info(db_path: Path, ids: Iterable[int]) -> dict[int, GalleryInf
     validate_violet_db(db_path)
     result: dict[int, GalleryInfo] = {}
     uri = f"file:{db_path.as_posix()}?mode=ro"
-    with sqlite3.connect(uri, uri=True) as db:
+    with closing(sqlite3.connect(uri, uri=True)) as db:
         for start in range(0, len(unique), 500):
             batch = unique[start : start + 500]
             marks = ",".join("?" for _ in batch)
