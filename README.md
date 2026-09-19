@@ -4,55 +4,110 @@ Violet 한국어 SQLite DB를 이용해 Hitomi 다운로드 자료를 작품 번
 
 ## 포터블 저장 방식
 
-설치가 필요 없습니다. `ArtistSorter.exe`가 있는 폴더에 프로그램 데이터가 같이 저장됩니다.
+설치가 필요 없습니다. \`ArtistSorter.exe\`가 있는 폴더에 프로그램 데이터가 같이 저장됩니다.
 
-- `ArtistSorter.exe`
-- `config.json` — 원본/정리 경로, DB 경로, Pi DB URL, 옵션
-- `rawdata-korean.db` — 프로그램에서 내려받은 Violet 한국 DB
+- \`ArtistSorter.exe\`
+- \`config.json\` — 경로, Pi DB URL, 스캔/중복 옵션
+- \`rawdata-korean.db\` — 내려받은 Violet 한국 DB
+- \`last-operation.json\` — 마지막 이동 작업의 되돌리기 로그가 있을 때만 생성
+- \`undo-backup/\` — 덮어쓰기 이동을 되돌리기 위해 필요한 경우에만 생성
 
-즉 Artist Sorter 폴더를 통째로 다른 드라이브나 PC로 옮겨도 설정과 DB가 함께 따라갑니다. `%LOCALAPPDATA%`는 사용하지 않습니다.
+\`%LOCALAPPDATA%\`는 사용하지 않습니다. Artist Sorter 폴더를 통째로 옮기면 설정과 DB도 같이 따라갑니다.
 
-## 기능
+## 주요 기능
 
-- 다운로드 폴더의 **최상위 파일/폴더명**에서 Hitomi 작품 번호 추출
-- Violet DB의 `HitomiColumnModel.Id`와 번호 매칭
-- `Artists` 컬럼을 이용한 작가별 분류
-- 폴더뿐 아니라 번호가 들어간 압축파일도 작가별 분류
-- `.zip`, `.rar`, `.7z`, `.cbz`, `.cbr` 등은 압축을 풀지 않고 파일 자체를 이동/복사
-- 실행 전 전체 결과 미리보기
-- **이동 / 복사** 선택
-- 작가가 여러 명인 경우 `첫 번째 작가` 또는 `작가명 합치기` 선택
-- 동일한 대상이 이미 있으면 덮어쓰지 않고 건너뜀
-- 로컬 Violet DB 직접 선택
-- Pi DB URL에서 `rawdata-korean.db` 갱신
-- 설정과 다운로드 DB를 EXE 실행 폴더에 저장
+- 파일/폴더명에서 Hitomi 작품 번호 추출
+- Violet DB의 \`HitomiColumnModel.Id\`와 번호 매칭
+- \`Artists\` 컬럼을 이용한 작가별 폴더 분류
+- 동일 작가가 이미 있으면 기존 작가 폴더를 그대로 재사용
+- 작가 미상은 화면에서 \`N/A\`, 실제 Windows 폴더는 \`N-A\`로 분류
+  - Windows 폴더명에는 \`/\`를 사용할 수 없어 \`N-A\`를 사용합니다.
+- \`.zip\`, \`.rar\`, \`.7z\`, \`.cbz\`, \`.cbr\` 등 압축파일을 풀지 않고 파일 자체로 분류
+- \`하위 폴더 포함\` 재귀 스캔
+  - 번호가 붙은 갤러리 폴더를 찾으면 그 폴더 자체를 작품으로 처리하고 내부는 더 스캔하지 않습니다.
+- 실행 전 미리보기 및 통계
+  - 작가 수 / DB 매칭 / N/A / DB 미매칭 / 실행 가능 개수
+- 이동 / 복사 선택
+- 마지막 **이동** 작업 되돌리기
+- 중복 처리
+  - \`건너뛰기\`
+  - \`이름에 (1) 추가\`
+  - \`덮어쓰기\`
+- Pi DB 자동 버전 확인
+  - 실행 시 \`syncversion.txt\`를 가볍게 확인
+  - 새 DB가 있으면 \`새 DB 있음\` 표시
+- Pi 주소는 \`http://192.168.x.x:3002\`처럼 서버 루트까지만 입력 가능
+  - DB 갱신 시 \`/rawdata\`
+  - 버전 확인 시 \`/syncversion.txt\`
+  - 프로그램이 자동으로 처리합니다.
 
 ## 사용 방법
 
-1. `ArtistSorter.exe` 실행
-2. `원본 폴더`에 정리할 Hitomi 자료가 있는 폴더 선택
-3. `정리 폴더` 선택
-4. Violet DB를 직접 선택하거나 `Pi DB URL`을 입력하고 `DB 갱신`
-5. `미리보기`로 매칭 결과 확인
-6. 이동/복사 방식을 선택하고 `정리 실행`
+1. \`ArtistSorter.exe\` 실행
+2. \`원본 폴더\` 선택
+3. \`정리 폴더\` 선택
+4. \`Pi DB URL\`에 Violet mobile DB 서버 주소 입력
+5. 필요하면 \`DB 갱신\`
+6. \`하위 폴더 포함\`, 중복 처리, 이동/복사 등의 옵션 선택
+7. \`미리보기\`
+8. 결과/통계를 확인한 뒤 \`정리 실행\`
 
-`DB 갱신`으로 받은 DB는 항상 EXE 옆의 `rawdata-korean.db`에 저장됩니다.
+DB는 EXE 옆의 \`rawdata-korean.db\`에 저장됩니다.
 
-자료 이름은 `4192094`, `[4192094] 제목`, `4192094.zip`, `4192094.rar`, `4192094.7z`, `[4192094] 제목.cbz` 같은 형태를 인식합니다. 압축파일은 해제하지 않고 원래 파일 그대로 작가 폴더에 이동/복사합니다. 번호가 없는 항목이나 DB에서 찾지 못한 항목은 자동으로 건너뜁니다.
+## 파일명 예시
+
+다음과 같은 형태를 인식합니다.
+
+- \`4192094\`
+- \`[4192094] 제목\`
+- \`4192094.zip\`
+- \`4192094.rar\`
+- \`4192094.7z\`
+- \`[4192094] 제목.cbz\`
+- \`4192094.cbr\`
+
+압축파일은 해제하지 않습니다.
+
+## 재실행 시 기존 작가 폴더
+
+예를 들어 첫 실행에서:
+
+\`\`\`
+정리폴더/
+└─ artist_a/
+   └─ 1111111.zip
+\`\`\`
+
+이 만들어진 뒤 나중에 \`2222222.zip\`도 같은 \`artist_a\` 작품으로 확인되면:
+
+\`\`\`
+정리폴더/
+└─ artist_a/
+   ├─ 1111111.zip
+   └─ 2222222.zip
+\`\`\`
+
+처럼 **기존 \`artist_a\` 폴더에 추가**됩니다.
+
+## 되돌리기
+
+\`이동\` 모드로 정리한 마지막 작업은 \`마지막 이동 되돌리기\`로 원래 위치에 복구할 수 있습니다.
+
+- 새 이동 작업을 실행하면 되돌리기 대상은 그 새 작업으로 교체됩니다.
+- \`덮어쓰기\`로 기존 대상이 교체된 경우에도 \`undo-backup/\`에 임시 보관해 함께 복원합니다.
+- 복사 작업은 되돌리기 대상이 아닙니다.
 
 ## DB 형식
 
-현재 Violet DB의 `HitomiColumnModel` 테이블에서 `Id`, `Title`, `Artists` 컬럼을 사용합니다. `Artists`는 `|artist1|artist2|` 형태를 지원합니다.
+현재 Violet DB의 \`HitomiColumnModel\` 테이블에서 \`Id\`, \`Title\`, \`Artists\` 컬럼을 사용합니다. \`Artists\`는 \`|artist1|artist2|\` 형태를 지원합니다.
 
 ## EXE 빌드
 
-GitHub Actions의 **Build Windows EXE** 워크플로가 Windows에서 PyInstaller로 단일 EXE를 생성합니다. Actions 실행 결과의 `ArtistSorter-windows` artifact에서 받을 수 있습니다.
-
-로컬 Windows에서도 `requirements-dev.txt` 설치 후 PyInstaller로 `dist/ArtistSorter.exe`를 만들 수 있습니다.
+GitHub Actions의 **Build Windows EXE** 워크플로가 Windows에서 테스트 후 PyInstaller 단일 EXE를 생성합니다. Actions 실행 결과의 \`ArtistSorter-windows\` artifact에서 받을 수 있습니다.
 
 ## 주의
 
-- `이동`은 실제 원본 위치를 변경합니다. 먼저 미리보기 결과를 확인하세요.
-- 대상 경로에 같은 이름이 이미 있으면 덮어쓰지 않습니다.
+- \`이동\`은 실제 원본 위치를 변경합니다. 먼저 미리보기를 확인하세요.
+- \`덮어쓰기\`는 기존 대상을 교체합니다.
 - 포터블 저장 방식이므로 EXE를 쓰기 가능한 폴더에 두세요.
 - DB URL, 사설 IP, 토큰 같은 개인 설정은 저장소에 커밋하지 마세요.
