@@ -55,7 +55,7 @@ class CoreTests(unittest.TestCase):
             plan = make_plan(source, output, db_path, "first")
             self.assertEqual(len(plan), 1)
             self.assertEqual(plan[0].artist_folder, "alice")
-            self.assertEqual(plan[0].destination, output / "alice" / "1234567")
+            self.assertEqual(plan[0].destination, (output / "alice" / "1234567").resolve())
             self.assertEqual(plan[0].status, "준비")
 
 
