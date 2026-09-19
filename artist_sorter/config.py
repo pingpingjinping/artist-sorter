@@ -20,6 +20,14 @@ def managed_db_path() -> Path:
     return app_dir() / "rawdata-korean.db"
 
 
+def last_operation_path() -> Path:
+    return app_dir() / "last-operation.json"
+
+
+def undo_backup_dir() -> Path:
+    return app_dir() / "undo-backup"
+
+
 def load_config() -> dict:
     try:
         return json.loads(config_path().read_text(encoding="utf-8"))
