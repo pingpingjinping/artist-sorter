@@ -14,16 +14,20 @@ class ArtistSorterApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Artist Sorter")
-        self.geometry("1180x760")
-        self.minsize(980, 620)
+        self.geometry("1180x800")
+        self.minsize(980, 660)
 
         self.config_data = load_config()
         self.plan: list[PlanItem] = []
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
 
+        default_db = Path(self.config_data.get("db_path", str(managed_db_path())))
+        default_db_folder = self.config_data.get("db_folder", str(default_db.parent))
+
         self.source_var = tk.StringVar(value=self.config_data.get("source_dir", ""))
         self.output_var = tk.StringVar(value=self.config_data.get("output_dir", ""))
-        self.db_var = tk.StringVar(value=self.config_data.get("db_path", str(managed_db_path())))
+        self.db_var = tk.StringVar(value=str(default_db))
+        self.db_folder_var = tk.StringVar(value=default_db_folder)
         self.url_var = tk.StringVar(value=self.config_data.get("db_url", ""))
         self.mode_var = tk.StringVar(value=self.config_data.get("mode", "move"))
         self.artist_strategy_var = tk.StringVar(value=self.config_data.get("artist_strategy", "first"))
@@ -37,19 +41,20 @@ class ArtistSorterApp(tk.Tk):
         outer = ttk.Frame(self, padding=12)
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(1, weight=1)
-        outer.rowconfigure(6, weight=1)
+        outer.rowconfigure(7, weight=1)
 
         self._path_row(outer, 0, "원본 폴더", self.source_var, self._pick_source)
         self._path_row(outer, 1, "정리 폴더", self.output_var, self._pick_output)
         self._path_row(outer, 2, "Violet DB", self.db_var, self._pick_db)
+        self._path_row(outer, 3, "DB 저장 폴더", self.db_folder_var, self._pick_db_folder)
 
-        ttk.Label(outer, text="Pi DB URL").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Entry(outer, textvariable=self.url_var).grid(row=3, column=1, sticky="ew", padx=(8, 8), pady=4)
-        self.download_btn = ttk.Button(outer, text="DB 내려받기", command=self._download_db)
-        self.download_btn.grid(row=3, column=2, sticky="ew", pady=4)
+        ttk.Label(outer, text="Pi DB URL").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(outer, textvariable=self.url_var).grid(row=4, column=1, sticky="ew", padx=(8, 8), pady=4)
+        self.download_btn = ttk.Button(outer, text="DB 갱신", command=self._download_db)
+        self.download_btn.grid(row=4, column=2, sticky="ew", pady=4)
 
         options = ttk.Frame(outer)
-        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 8))
+        options.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 8))
         ttk.Label(options, text="실행 방식").pack(side="left")
         ttk.Radiobutton(options, text="이동", variable=self.mode_var, value="move").pack(side="left", padx=(8, 4))
         ttk.Radiobutton(options, text="복사", variable=self.mode_var, value="copy").pack(side="left", padx=4)
@@ -59,7 +64,7 @@ class ArtistSorterApp(tk.Tk):
         ttk.Radiobutton(options, text="작가명 합치기", variable=self.artist_strategy_var, value="combined").pack(side="left", padx=4)
 
         actions = ttk.Frame(outer)
-        actions.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+        actions.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 8))
         self.preview_btn = ttk.Button(actions, text="1. 미리보기", command=self._preview)
         self.preview_btn.pack(side="left")
         self.run_btn = ttk.Button(actions, text="2. 정리 실행", command=self._run_plan, state="disabled")
@@ -67,7 +72,7 @@ class ArtistSorterApp(tk.Tk):
         ttk.Label(actions, textvariable=self.status_var).pack(side="right")
 
         table_frame = ttk.Frame(outer)
-        table_frame.grid(row=6, column=0, columnspan=3, sticky="nsew")
+        table_frame.grid(row=7, column=0, columnspan=3, sticky="nsew")
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
 
@@ -87,7 +92,7 @@ class ArtistSorterApp(tk.Tk):
         self.tree.configure(yscrollcommand=yscroll.set)
 
         self.progress = ttk.Progressbar(outer, mode="indeterminate")
-        self.progress.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.progress.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 0))
 
     def _path_row(self, parent: ttk.Frame, row: int, label: str, var: tk.StringVar, command) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=4)
@@ -107,14 +112,28 @@ class ArtistSorterApp(tk.Tk):
             self.output_var.set(value)
 
     def _pick_db(self) -> None:
-        value = filedialog.askopenfilename(title="Violet SQLite DB 선택", filetypes=[("SQLite DB", "*.db"), ("모든 파일", "*.*")])
+        value = filedialog.askopenfilename(
+            title="Violet SQLite DB 선택",
+            filetypes=[("SQLite DB", "*.db"), ("모든 파일", "*.*")],
+        )
         if value:
             try:
                 validate_violet_db(Path(value))
             except Exception as exc:
                 messagebox.showerror("DB 확인 실패", str(exc))
                 return
-            self.db_var.set(value)
+            path = Path(value)
+            self.db_var.set(str(path))
+            self.db_folder_var.set(str(path.parent))
+
+    def _pick_db_folder(self) -> None:
+        current = self.db_folder_var.get().strip()
+        value = filedialog.askdirectory(
+            title="DB 저장 폴더 선택",
+            initialdir=current if current and Path(current).is_dir() else None,
+        )
+        if value:
+            self.db_folder_var.set(value)
 
     def _set_busy(self, busy: bool, text: str = "") -> None:
         state = "disabled" if busy else "normal"
@@ -157,8 +176,14 @@ class ArtistSorterApp(tk.Tk):
         if not url:
             messagebox.showerror("URL 필요", "Pi의 DB 다운로드 URL을 입력해주세요.")
             return
-        destination = managed_db_path()
-        self._set_busy(True, "DB 내려받는 중...")
+
+        folder_text = self.db_folder_var.get().strip()
+        if not folder_text:
+            messagebox.showerror("저장 폴더 필요", "DB 저장 폴더를 선택해주세요.")
+            return
+
+        destination = Path(folder_text).expanduser() / "rawdata-korean.db"
+        self._set_busy(True, "DB 갱신 중...")
         threading.Thread(target=self._download_worker, args=(url, destination), daemon=True).start()
 
     def _download_worker(self, url: str, destination: Path) -> None:
@@ -211,7 +236,8 @@ class ArtistSorterApp(tk.Tk):
                 elif kind == "download_done":
                     path = payload
                     self.db_var.set(str(path))
-                    self._set_busy(False, "DB 다운로드 완료")
+                    self.db_folder_var.set(str(Path(path).parent))
+                    self._set_busy(False, "DB 갱신 완료")
                     messagebox.showinfo("완료", f"DB를 저장했습니다.\n{path}")
                 elif kind == "run_done":
                     completed, skipped, errors = payload
@@ -219,7 +245,11 @@ class ArtistSorterApp(tk.Tk):
                     detail = "\n".join(errors[:10])
                     if len(errors) > 10:
                         detail += f"\n... 외 {len(errors) - 10}개"
-                    messagebox.showinfo("정리 완료", f"완료: {completed}\n건너뜀: {skipped}\n실패: {len(errors)}" + (f"\n\n{detail}" if detail else ""))
+                    messagebox.showinfo(
+                        "정리 완료",
+                        f"완료: {completed}\n건너뜀: {skipped}\n실패: {len(errors)}"
+                        + (f"\n\n{detail}" if detail else ""),
+                    )
                     self.plan = []
                     self.run_btn.configure(state="disabled")
                 elif kind == "error":
@@ -234,6 +264,7 @@ class ArtistSorterApp(tk.Tk):
             "source_dir": self.source_var.get(),
             "output_dir": self.output_var.get(),
             "db_path": self.db_var.get(),
+            "db_folder": self.db_folder_var.get(),
             "db_url": self.url_var.get(),
             "mode": self.mode_var.get(),
             "artist_strategy": self.artist_strategy_var.get(),
