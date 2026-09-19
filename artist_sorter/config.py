@@ -1,28 +1,23 @@
 from __future__ import annotations
 
 import json
-import os
+import sys
 from pathlib import Path
 
-APP_NAME = "ArtistSorter"
 
-
-def app_data_dir() -> Path:
-    if os.name == "nt":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    path = base / APP_NAME
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+def app_dir() -> Path:
+    """Return the portable data directory: the folder containing the EXE."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
 def config_path() -> Path:
-    return app_data_dir() / "config.json"
+    return app_dir() / "config.json"
 
 
 def managed_db_path() -> Path:
-    return app_data_dir() / "rawdata-korean.db"
+    return app_dir() / "rawdata-korean.db"
 
 
 def load_config() -> dict:

@@ -18,6 +18,10 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(extract_gallery_id("4192094"), 4192094)
         self.assertEqual(extract_gallery_id("[4192094] sample title"), 4192094)
         self.assertEqual(extract_gallery_id("4192094.zip"), 4192094)
+        self.assertEqual(extract_gallery_id("4192094.rar"), 4192094)
+        self.assertEqual(extract_gallery_id("4192094.7z"), 4192094)
+        self.assertEqual(extract_gallery_id("[4192094] sample title.cbz"), 4192094)
+        self.assertEqual(extract_gallery_id("4192094.cbr"), 4192094)
         self.assertIsNone(extract_gallery_id("sample title"))
 
     def test_parse_artists(self):
@@ -39,8 +43,14 @@ class CoreTests(unittest.TestCase):
             root = Path(td)
             db_path = root / "data.db"
             db = sqlite3.connect(db_path)
-            db.execute("CREATE TABLE HitomiColumnModel (Id INTEGER PRIMARY KEY, Title TEXT, Artists TEXT)")
-            db.execute("INSERT INTO HitomiColumnModel VALUES (1234567, 'Test Work', '|alice|bob|')")
+            db.execute(
+                "CREATE TABLE HitomiColumnModel "
+                "(Id INTEGER PRIMARY KEY, Title TEXT, Artists TEXT)"
+            )
+            db.execute(
+                "INSERT INTO HitomiColumnModel VALUES "
+                "(1234567, 'Test Work', '|alice|bob|')"
+            )
             db.commit()
             db.close()
 
@@ -55,8 +65,53 @@ class CoreTests(unittest.TestCase):
             plan = make_plan(source, output, db_path, "first")
             self.assertEqual(len(plan), 1)
             self.assertEqual(plan[0].artist_folder, "alice")
-            self.assertEqual(plan[0].destination, (output / "alice" / "1234567").resolve())
+            self.assertEqual(
+                plan[0].destination,
+                (output / "alice" / "1234567").resolve(),
+            )
             self.assertEqual(plan[0].status, "준비")
+
+    def test_archive_files_are_sorted_without_extracting(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            db = sqlite3.connect(db_path)
+            db.execute(
+                "CREATE TABLE HitomiColumnModel "
+                "(Id INTEGER PRIMARY KEY, Title TEXT, Artists TEXT)"
+            )
+            db.execute(
+                "INSERT INTO HitomiColumnModel VALUES "
+                "(4192094, 'Archive Work', '|archive artist|')"
+            )
+            db.commit()
+            db.close()
+
+            source = root / "downloads"
+            source.mkdir()
+            archive_names = (
+                "4192094.zip",
+                "4192094.rar",
+                "4192094.7z",
+                "[4192094] Archive Work.cbz",
+                "4192094.cbr",
+            )
+            for name in archive_names:
+                (source / name).write_bytes(b"test")
+
+            output = root / "sorted"
+            plan = make_plan(source, output, db_path, "first")
+
+            self.assertEqual(len(plan), len(archive_names))
+            self.assertTrue(all(item.gallery_id == 4192094 for item in plan))
+            self.assertTrue(
+                all(item.artist_folder == "archive artist" for item in plan)
+            )
+            self.assertEqual(
+                {item.destination.name for item in plan if item.destination},
+                set(archive_names),
+            )
+            self.assertTrue(all(item.status == "준비" for item in plan))
 
 
 if __name__ == "__main__":
