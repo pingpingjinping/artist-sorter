@@ -189,6 +189,41 @@ class CoreTests(unittest.TestCase):
                 (output / "N-A").resolve(),
             )
 
+    def test_db_unmatched_goes_to_n_a_and_is_executable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(db_path, [])
+
+            source = root / "downloads"
+            source.mkdir()
+            incoming = source / "8888888.zip"
+            incoming.write_bytes(b"unmatched")
+            output = root / "sorted"
+
+            plan = make_plan(source, output, db_path)
+            self.assertEqual(len(plan), 1)
+            self.assertEqual(plan[0].artist_folder, "N-A")
+            self.assertEqual(
+                plan[0].destination,
+                (output / "N-A" / "8888888.zip").resolve(),
+            )
+            self.assertTrue(plan[0].status.startswith("준비"))
+            self.assertIn("DB 미매칭", plan[0].status)
+
+            stats = plan_stats(plan)
+            self.assertEqual(stats["matched"], 0)
+            self.assertEqual(stats["unknown_artist"], 0)
+            self.assertEqual(stats["db_unmatched"], 1)
+            self.assertEqual(stats["ready"], 1)
+
+            result = execute_plan(plan, "move")
+            self.assertEqual(result.completed, 1)
+            self.assertFalse(incoming.exists())
+            self.assertTrue(
+                (output / "N-A" / "8888888.zip").exists()
+            )
+
     def test_duplicate_policies(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
