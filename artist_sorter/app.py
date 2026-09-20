@@ -706,15 +706,15 @@ class ArtistSorterApp(tk.Tk):
     def _render_plan(self) -> None:
         self.tree.delete(*self.tree.get_children())
         for item in self.plan:
-            artists = (
-                ", ".join(item.artists)
-                if item.artists
-                else (
-                    "N/A"
-                    if item.artist_folder == "기타"
-                    else ""
-                )
-            )
+            if item.artists:
+                artists = ", ".join(item.artists)
+            elif item.groups:
+                artists = "group: " + ", ".join(item.groups)
+            elif item.artist_folder == "기타":
+                artists = "N/A"
+            else:
+                artists = ""
+
             self.tree.insert(
                 "",
                 "end",
@@ -759,6 +759,7 @@ class ArtistSorterApp(tk.Tk):
                         False,
                         "작가 "
                         f"{stats['artists']}명 / "
+                        f"그룹 {stats['groups']}개 / "
                         f"매칭 {stats['matched']}개 / "
                         f"N/A {stats['unknown_artist']}개 / "
                         f"DB 미매칭 {stats['db_unmatched']}개 / "
