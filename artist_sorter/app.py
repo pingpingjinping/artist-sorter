@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .config import (
+    config_path,
     last_operation_path,
     load_config,
     managed_db_path,
@@ -49,6 +51,9 @@ class ArtistSorterApp(tk.Tk):
         self.config_data = load_config()
         self.plan: list[PlanItem] = []
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
+        self.sort_column: str | None = None
+        self.sort_reverse = False
+        self.column_labels: dict[str, str] = {}
 
         duplicate_value = self.config_data.get("duplicate_policy", "skip")
         duplicate_label = DUPLICATE_VALUE_TO_LABEL.get(
@@ -260,7 +265,7 @@ class ArtistSorterApp(tk.Tk):
             columns=columns,
             show="headings",
         )
-        labels = {
+        self.column_labels = {
             "id": "ID",
             "source": "원본",
             "artists": "작가",
@@ -277,7 +282,11 @@ class ArtistSorterApp(tk.Tk):
             "status": 130,
         }
         for col in columns:
-            self.tree.heading(col, text=labels[col])
+            self.tree.heading(
+                col,
+                text=self.column_labels[col],
+                command=lambda c=col: self._sort_tree(c),
+            )
             self.tree.column(
                 col,
                 width=widths[col],
@@ -387,6 +396,17 @@ class ArtistSorterApp(tk.Tk):
             "skip",
         )
 
+    def _scan_exclude_paths(self) -> list[Path]:
+        paths = [
+            config_path(),
+            managed_db_path(),
+            last_operation_path(),
+            undo_backup_dir(),
+        ]
+        if getattr(sys, "frozen", False):
+            paths.append(Path(sys.executable))
+        return paths
+
     def _invalidate_plan(self) -> None:
         if self.plan:
             self.plan = []
@@ -435,6 +455,7 @@ class ArtistSorterApp(tk.Tk):
         strategy = self.artist_strategy_var.get()
         recursive = self.recursive_var.get()
         duplicate_policy = self._duplicate_policy()
+        exclude_paths = self._scan_exclude_paths()
 
         self._set_busy(True, "스캔 중...")
         threading.Thread(
@@ -446,6 +467,7 @@ class ArtistSorterApp(tk.Tk):
                 strategy,
                 recursive,
                 duplicate_policy,
+                exclude_paths,
             ),
             daemon=True,
         ).start()
@@ -458,6 +480,7 @@ class ArtistSorterApp(tk.Tk):
         strategy: str,
         recursive: bool,
         duplicate_policy: str,
+        exclude_paths: list[Path],
     ) -> None:
         try:
             plan = make_plan(
@@ -467,6 +490,7 @@ class ArtistSorterApp(tk.Tk):
                 strategy,
                 recursive=recursive,
                 duplicate_policy=duplicate_policy,
+                exclude_paths=exclude_paths,
             )
             self.events.put(("preview_done", plan))
         except Exception as exc:
@@ -631,6 +655,54 @@ class ArtistSorterApp(tk.Tk):
         if hasattr(self, "undo_btn"):
             self.undo_btn.configure(state=state)
 
+    def _sort_tree(self, column: str) -> None:
+        if self.sort_column == column:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_column = column
+            self.sort_reverse = False
+        self._apply_tree_sort()
+
+    def _apply_tree_sort(self) -> None:
+        if not self.sort_column:
+            return
+
+        column = self.sort_column
+        populated: list[tuple[object, str]] = []
+        empty: list[str] = []
+
+        for iid in self.tree.get_children(""):
+            value = self.tree.set(iid, column)
+            if value == "":
+                empty.append(iid)
+                continue
+            if column == "id":
+                try:
+                    key: object = int(value)
+                except ValueError:
+                    key = value.casefold()
+            else:
+                key = value.casefold()
+            populated.append((key, iid))
+
+        populated.sort(
+            key=lambda item: item[0],
+            reverse=self.sort_reverse,
+        )
+        ordered = [iid for _, iid in populated] + empty
+        for index, iid in enumerate(ordered):
+            self.tree.move(iid, "", index)
+
+        for col, label in self.column_labels.items():
+            suffix = ""
+            if col == column:
+                suffix = " ▼" if self.sort_reverse else " ▲"
+            self.tree.heading(
+                col,
+                text=label + suffix,
+                command=lambda c=col: self._sort_tree(c),
+            )
+
     def _render_plan(self) -> None:
         self.tree.delete(*self.tree.get_children())
         for item in self.plan:
@@ -657,6 +729,7 @@ class ArtistSorterApp(tk.Tk):
                     item.status,
                 ),
             )
+        self._apply_tree_sort()
 
     def _save(self) -> None:
         data = {
