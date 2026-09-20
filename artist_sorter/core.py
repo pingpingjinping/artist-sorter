@@ -17,7 +17,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 ID_TOKEN = re.compile(r"(?<!\d)(\d{4,10})(?!\d)")
-UNKNOWN_ARTIST_FOLDER = "N-A"
+UNKNOWN_ARTIST_FOLDER = "기타"
 
 DuplicatePolicy = Literal["skip", "rename", "overwrite"]
 
