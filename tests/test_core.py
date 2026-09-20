@@ -304,6 +304,56 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(stats["db_unmatched"], 1)
             self.assertEqual(stats["no_id"], 1)
 
+    def test_portable_app_files_are_excluded_from_scan(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "rawdata-korean.db"
+            make_db(
+                db_path,
+                [
+                    (7000001, "Real Work", "|alice|"),
+                    (7000002, "Undo Work", "|bob|"),
+                ],
+            )
+
+            real = root / "7000001.zip"
+            real.write_bytes(b"real")
+            exe = root / "ArtistSorter.exe"
+            exe.write_bytes(b"exe")
+            config = root / "config.json"
+            config.write_text("{}", encoding="utf-8")
+            log = root / "last-operation.json"
+            log.write_text("{}", encoding="utf-8")
+            backup = root / "undo-backup"
+            backup.mkdir()
+            (backup / "7000002.zip").write_bytes(b"backup")
+            output = root / "sorted"
+
+            excluded = [exe, config, db_path, log, backup]
+
+            flat = make_plan(
+                root,
+                output,
+                db_path,
+                exclude_paths=excluded,
+            )
+            self.assertEqual(
+                [item.source.name for item in flat],
+                ["7000001.zip"],
+            )
+
+            recursive = make_plan(
+                root,
+                output,
+                db_path,
+                recursive=True,
+                exclude_paths=excluded,
+            )
+            self.assertEqual(
+                [item.source.name for item in recursive],
+                ["7000001.zip"],
+            )
+
     def test_server_url_helpers(self):
         base = "http://192.168.0.39:3002"
         self.assertEqual(
