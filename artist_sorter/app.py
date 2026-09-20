@@ -711,7 +711,7 @@ class ArtistSorterApp(tk.Tk):
                 if item.artists
                 else (
                     "N/A"
-                    if item.artist_folder == "N-A"
+                    if item.artist_folder == "기타"
                     else ""
                 )
             )
