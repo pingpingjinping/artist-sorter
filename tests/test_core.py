@@ -34,6 +34,26 @@ def make_db(path: Path, rows: list[tuple[int, str, str | None]]) -> None:
     db.close()
 
 
+def make_db_with_groups(
+    path: Path,
+    rows: list[tuple[int, str, str | None, str | None]],
+    column: str = "Groups",
+) -> None:
+    db = sqlite3.connect(path)
+    db.execute(
+        f"CREATE TABLE HitomiColumnModel "
+        f"(Id INTEGER PRIMARY KEY, Title TEXT, Artists TEXT, "
+        f'"{column}" TEXT)'
+    )
+    db.executemany(
+        f'INSERT INTO HitomiColumnModel '
+        f'(Id, Title, Artists, "{column}") VALUES (?, ?, ?, ?)',
+        rows,
+    )
+    db.commit()
+    db.close()
+
+
 class CoreTests(unittest.TestCase):
     def test_extract_gallery_id(self):
         self.assertEqual(extract_gallery_id("4192094"), 4192094)
@@ -89,10 +109,13 @@ class CoreTests(unittest.TestCase):
 
             plan = make_plan(source, output, db_path, "first")
             self.assertEqual(len(plan), 1)
-            self.assertEqual(plan[0].artist_folder, "alice")
+            self.assertEqual(
+                plan[0].artist_folder,
+                str(Path("artist") / "alice"),
+            )
             self.assertEqual(
                 plan[0].destination,
-                (output / "alice" / "1234567").resolve(),
+                (output / "artist" / "alice" / "1234567").resolve(),
             )
             self.assertEqual(plan[0].status, "준비")
 
@@ -126,7 +149,7 @@ class CoreTests(unittest.TestCase):
             )
             self.assertTrue(
                 all(
-                    item.artist_folder == "archive artist"
+                    item.artist_folder == str(Path("artist") / "archive artist")
                     for item in plan
                 )
             )
@@ -171,6 +194,94 @@ class CoreTests(unittest.TestCase):
             )
             names = {item.source.name for item in plan}
             self.assertEqual(names, {"1111111", "2222222.zip"})
+
+    def test_group_only_goes_under_group_folder(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db_with_groups(
+                db_path,
+                [
+                    (
+                        3333001,
+                        "Group Work",
+                        "|N/A|",
+                        "|circle a|circle b|",
+                    )
+                ],
+            )
+            source = root / "downloads"
+            source.mkdir()
+            (source / "3333001.zip").write_bytes(b"x")
+            output = root / "sorted"
+
+            infos = load_gallery_info(db_path, [3333001])
+            self.assertEqual(
+                infos[3333001].groups,
+                ("circle a", "circle b"),
+            )
+
+            plan = make_plan(source, output, db_path)
+            self.assertEqual(plan[0].artists, ())
+            self.assertEqual(
+                plan[0].groups,
+                ("circle a", "circle b"),
+            )
+            self.assertEqual(
+                plan[0].artist_folder,
+                str(Path("group") / "circle a"),
+            )
+            self.assertEqual(
+                plan[0].destination,
+                (
+                    output
+                    / "group"
+                    / "circle a"
+                    / "3333001.zip"
+                ).resolve(),
+            )
+
+            stats = plan_stats(plan)
+            self.assertEqual(stats["artists"], 0)
+            self.assertEqual(stats["groups"], 1)
+            self.assertEqual(stats["unknown_artist"], 0)
+
+    def test_artist_takes_priority_over_group(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db_with_groups(
+                db_path,
+                [
+                    (
+                        3333002,
+                        "Artist Work",
+                        "|alice|",
+                        "|circle a|",
+                    )
+                ],
+                column="Group",
+            )
+            source = root / "downloads"
+            source.mkdir()
+            (source / "3333002.zip").write_bytes(b"x")
+            output = root / "sorted"
+
+            plan = make_plan(source, output, db_path)
+            self.assertEqual(
+                plan[0].artist_folder,
+                str(Path("artist") / "alice"),
+            )
+            self.assertEqual(
+                plan[0].destination,
+                (
+                    output
+                    / "artist"
+                    / "alice"
+                    / "3333002.zip"
+                ).resolve(),
+            )
+            self.assertEqual(plan[0].groups, ("circle a",))
 
     def test_unknown_artist_goes_to_n_a_equivalent(self):
         with tempfile.TemporaryDirectory() as td:
@@ -234,7 +345,7 @@ class CoreTests(unittest.TestCase):
             incoming = source / "4444444.zip"
             incoming.write_bytes(b"new")
             output = root / "sorted"
-            existing = output / "alice" / "4444444.zip"
+            existing = output / "artist" / "alice" / "4444444.zip"
             existing.parent.mkdir(parents=True)
             existing.write_bytes(b"old")
 
@@ -277,7 +388,7 @@ class CoreTests(unittest.TestCase):
             incoming = source / "5555555.zip"
             incoming.write_bytes(b"new")
             output = root / "sorted"
-            existing = output / "alice" / "5555555.zip"
+            existing = output / "artist" / "alice" / "5555555.zip"
             existing.parent.mkdir(parents=True)
             existing.write_bytes(b"old")
 
