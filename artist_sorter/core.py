@@ -27,6 +27,7 @@ class GalleryInfo:
     gallery_id: int
     title: str
     artists: tuple[str, ...]
+    groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class PlanItem:
     destination: Path | None
     status: str
     replace_existing: bool = False
+    groups: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -68,11 +70,19 @@ def extract_gallery_id(name: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def parse_artists(raw: str | None) -> tuple[str, ...]:
+def parse_name_list(raw: str | None) -> tuple[str, ...]:
     if not raw:
         return ()
     values = [part.strip() for part in raw.split("|") if part.strip()]
     return tuple(v for v in values if v.casefold() not in {"n/a", "unknown"})
+
+
+def parse_artists(raw: str | None) -> tuple[str, ...]:
+    return parse_name_list(raw)
+
+
+def parse_groups(raw: str | None) -> tuple[str, ...]:
+    return parse_name_list(raw)
 
 
 def sanitize_windows_name(value: str, fallback: str = "_UNKNOWN") -> str:
@@ -185,18 +195,36 @@ def load_gallery_info(
     result: dict[int, GalleryInfo] = {}
     uri = f"file:{db_path.as_posix()}?mode=ro"
     with closing(sqlite3.connect(uri, uri=True)) as db:
+        cols = {
+            r[1] for r in db.execute('PRAGMA table_info("HitomiColumnModel")')
+        }
+        group_column = (
+            "Groups"
+            if "Groups" in cols
+            else "Group"
+            if "Group" in cols
+            else None
+        )
+        group_select = (
+            f', "{group_column}"'
+            if group_column is not None
+            else ", NULL"
+        )
+
         for start in range(0, len(unique), 500):
             batch = unique[start:start + 500]
             marks = ",".join("?" for _ in batch)
             sql = (
-                "SELECT Id, COALESCE(Title, ''), Artists "
+                "SELECT Id, COALESCE(Title, ''), Artists"
+                f"{group_select} "
                 f"FROM HitomiColumnModel WHERE Id IN ({marks})"
             )
-            for gallery_id, title, artists in db.execute(sql, batch):
+            for gallery_id, title, artists, groups in db.execute(sql, batch):
                 result[int(gallery_id)] = GalleryInfo(
                     int(gallery_id),
                     str(title or ""),
                     parse_artists(artists),
+                    parse_groups(groups),
                 )
     return result
 
@@ -276,12 +304,21 @@ def make_plan(
         if db_unmatched:
             title = ""
             artists: tuple[str, ...] = ()
+            groups: tuple[str, ...] = ()
             folder = UNKNOWN_ARTIST_FOLDER
         else:
             assert gallery is not None
             title = gallery.title
             artists = gallery.artists
-            folder = choose_artist_folder(artists, strategy)
+            groups = gallery.groups
+            if artists:
+                artist_name = choose_artist_folder(artists, strategy)
+                folder = str(Path("artist") / artist_name)
+            elif groups:
+                group_name = sanitize_windows_name(groups[0])
+                folder = str(Path("group") / group_name)
+            else:
+                folder = UNKNOWN_ARTIST_FOLDER
 
         desired = output_dir / folder / item.source.name
         desired_key = _destination_key(desired)
@@ -301,6 +338,7 @@ def make_plan(
                     folder,
                     desired,
                     with_db_state("이미 정리됨"),
+                    groups=groups,
                 )
             )
             continue
@@ -320,6 +358,7 @@ def make_plan(
                         folder,
                         desired,
                         with_db_state("계획 내 대상 중복"),
+                        groups=groups,
                     )
                 )
                 continue
@@ -334,6 +373,7 @@ def make_plan(
                         folder,
                         desired,
                         with_db_state("대상에 이미 존재"),
+                        groups=groups,
                     )
                 )
                 continue
@@ -361,6 +401,7 @@ def make_plan(
                 destination,
                 status,
                 replace_existing,
+                groups=groups,
             )
         )
 
@@ -386,16 +427,24 @@ def plan_stats(plan: Iterable[PlanItem]) -> dict[str, int]:
         )
     ]
     unknown_artist = [
-        x for x in db_matched if x.artist_folder == UNKNOWN_ARTIST_FOLDER
+        x
+        for x in db_matched
+        if not x.artists and not x.groups
     ]
     artists = {
         x.artist_folder
         for x in db_matched
-        if x.artist_folder and x.artist_folder != UNKNOWN_ARTIST_FOLDER
+        if x.artists
+    }
+    groups = {
+        x.artist_folder
+        for x in db_matched
+        if not x.artists and x.groups
     }
     return {
         "total": len(entries),
         "artists": len(artists),
+        "groups": len(groups),
         "matched": len(db_matched),
         "unknown_artist": len(unknown_artist),
         "db_unmatched": len(db_unmatched),
