@@ -112,13 +112,13 @@ def _is_same_or_child(path: Path, parent: Path) -> bool:
 def scan_items(
     source_dir: Path,
     recursive: bool = False,
-    exclude_dirs: Iterable[Path] = (),
+    exclude_paths: Iterable[Path] = (),
 ) -> list[ScanItem]:
     source_dir = source_dir.expanduser().resolve()
     if not source_dir.is_dir():
         raise FileNotFoundError(f"원본 폴더를 찾을 수 없습니다: {source_dir}")
 
-    excluded = [p.expanduser().resolve() for p in exclude_dirs]
+    excluded = [p.expanduser().resolve() for p in exclude_paths]
 
     def excluded_path(path: Path) -> bool:
         return any(_is_same_or_child(path, base) for base in excluded)
@@ -234,22 +234,25 @@ def make_plan(
     strategy: Literal["first", "combined"] = "first",
     recursive: bool = False,
     duplicate_policy: DuplicatePolicy = "skip",
+    exclude_paths: Iterable[Path] = (),
 ) -> list[PlanItem]:
     if duplicate_policy not in {"skip", "rename", "overwrite"}:
         raise ValueError(f"지원하지 않는 중복 처리 방식: {duplicate_policy}")
 
     source_resolved = source_dir.expanduser().resolve()
     output_dir = output_dir.expanduser().resolve()
-    excluded = (
-        (output_dir,)
-        if output_dir != source_resolved
+
+    excluded = [p.expanduser().resolve() for p in exclude_paths]
+    if (
+        output_dir != source_resolved
         and _is_same_or_child(output_dir, source_resolved)
-        else ()
-    )
+    ):
+        excluded.append(output_dir)
+
     scanned = scan_items(
         source_resolved,
         recursive=recursive,
-        exclude_dirs=excluded,
+        exclude_paths=excluded,
     )
     valid_ids = [
         x.gallery_id for x in scanned if x.gallery_id is not None
