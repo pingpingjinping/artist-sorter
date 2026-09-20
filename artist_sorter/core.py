@@ -272,34 +272,35 @@ def make_plan(
             continue
 
         gallery = info.get(item.gallery_id)
-        if gallery is None:
-            plan.append(
-                PlanItem(
-                    item.source,
-                    item.gallery_id,
-                    "",
-                    (),
-                    "",
-                    None,
-                    "DB 미매칭",
-                )
-            )
-            continue
+        db_unmatched = gallery is None
+        if db_unmatched:
+            title = ""
+            artists: tuple[str, ...] = ()
+            folder = UNKNOWN_ARTIST_FOLDER
+        else:
+            assert gallery is not None
+            title = gallery.title
+            artists = gallery.artists
+            folder = choose_artist_folder(artists, strategy)
 
-        folder = choose_artist_folder(gallery.artists, strategy)
         desired = output_dir / folder / item.source.name
         desired_key = _destination_key(desired)
+
+        def with_db_state(status: str) -> str:
+            if db_unmatched:
+                return f"{status} (DB 미매칭)"
+            return status
 
         if desired_key == _destination_key(item.source):
             plan.append(
                 PlanItem(
                     item.source,
                     item.gallery_id,
-                    gallery.title,
-                    gallery.artists,
+                    title,
+                    artists,
                     folder,
                     desired,
-                    "이미 정리됨",
+                    with_db_state("이미 정리됨"),
                 )
             )
             continue
@@ -307,18 +308,18 @@ def make_plan(
         if desired_key in reserved:
             if duplicate_policy == "rename":
                 destination = _unique_destination(desired, reserved)
-                status = "준비 (이름 변경)"
+                status = with_db_state("준비 (이름 변경)")
                 replace_existing = False
             else:
                 plan.append(
                     PlanItem(
                         item.source,
                         item.gallery_id,
-                        gallery.title,
-                        gallery.artists,
+                        title,
+                        artists,
                         folder,
                         desired,
-                        "계획 내 대상 중복",
+                        with_db_state("계획 내 대상 중복"),
                     )
                 )
                 continue
@@ -328,25 +329,25 @@ def make_plan(
                     PlanItem(
                         item.source,
                         item.gallery_id,
-                        gallery.title,
-                        gallery.artists,
+                        title,
+                        artists,
                         folder,
                         desired,
-                        "대상에 이미 존재",
+                        with_db_state("대상에 이미 존재"),
                     )
                 )
                 continue
             if duplicate_policy == "rename":
                 destination = _unique_destination(desired, reserved)
-                status = "준비 (이름 변경)"
+                status = with_db_state("준비 (이름 변경)")
                 replace_existing = False
             else:
                 destination = desired
-                status = "준비 (덮어쓰기)"
+                status = with_db_state("준비 (덮어쓰기)")
                 replace_existing = True
         else:
             destination = desired
-            status = "준비"
+            status = with_db_state("준비")
             replace_existing = False
 
         reserved.add(_destination_key(destination))
@@ -354,8 +355,8 @@ def make_plan(
             PlanItem(
                 item.source,
                 item.gallery_id,
-                gallery.title,
-                gallery.artists,
+                title,
+                artists,
                 folder,
                 destination,
                 status,
@@ -372,10 +373,17 @@ def plan_is_ready(item: PlanItem) -> bool:
 
 def plan_stats(plan: Iterable[PlanItem]) -> dict[str, int]:
     entries = list(plan)
+    db_unmatched = [
+        x for x in entries if "DB 미매칭" in x.status
+    ]
     db_matched = [
         x
         for x in entries
-        if x.gallery_id is not None and bool(x.artist_folder)
+        if (
+            x.gallery_id is not None
+            and bool(x.artist_folder)
+            and "DB 미매칭" not in x.status
+        )
     ]
     unknown_artist = [
         x for x in db_matched if x.artist_folder == UNKNOWN_ARTIST_FOLDER
@@ -390,7 +398,7 @@ def plan_stats(plan: Iterable[PlanItem]) -> dict[str, int]:
         "artists": len(artists),
         "matched": len(db_matched),
         "unknown_artist": len(unknown_artist),
-        "db_unmatched": sum(x.status == "DB 미매칭" for x in entries),
+        "db_unmatched": len(db_unmatched),
         "no_id": sum(x.status == "번호 없음" for x in entries),
         "ready": sum(plan_is_ready(x) for x in entries),
     }
