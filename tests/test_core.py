@@ -56,7 +56,7 @@ class CoreTests(unittest.TestCase):
             choose_artist_folder((), "first"),
             UNKNOWN_ARTIST_FOLDER,
         )
-        self.assertEqual(UNKNOWN_ARTIST_FOLDER, "N-A")
+        self.assertEqual(UNKNOWN_ARTIST_FOLDER, "기타")
 
     def test_windows_name(self):
         self.assertEqual(sanitize_windows_name('a:b*c?'), "a_b_c_")
@@ -183,10 +183,45 @@ class CoreTests(unittest.TestCase):
             output = root / "sorted"
 
             plan = make_plan(source, output, db_path)
-            self.assertEqual(plan[0].artist_folder, "N-A")
+            self.assertEqual(plan[0].artist_folder, "기타")
             self.assertEqual(
                 plan[0].destination.parent,
-                (output / "N-A").resolve(),
+                (output / "기타").resolve(),
+            )
+
+    def test_db_unmatched_goes_to_n_a_and_is_executable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(db_path, [])
+
+            source = root / "downloads"
+            source.mkdir()
+            incoming = source / "8888888.zip"
+            incoming.write_bytes(b"unmatched")
+            output = root / "sorted"
+
+            plan = make_plan(source, output, db_path)
+            self.assertEqual(len(plan), 1)
+            self.assertEqual(plan[0].artist_folder, "기타")
+            self.assertEqual(
+                plan[0].destination,
+                (output / "기타" / "8888888.zip").resolve(),
+            )
+            self.assertTrue(plan[0].status.startswith("준비"))
+            self.assertIn("DB 미매칭", plan[0].status)
+
+            stats = plan_stats(plan)
+            self.assertEqual(stats["matched"], 0)
+            self.assertEqual(stats["unknown_artist"], 0)
+            self.assertEqual(stats["db_unmatched"], 1)
+            self.assertEqual(stats["ready"], 1)
+
+            result = execute_plan(plan, "move")
+            self.assertEqual(result.completed, 1)
+            self.assertFalse(incoming.exists())
+            self.assertTrue(
+                (output / "기타" / "8888888.zip").exists()
             )
 
     def test_duplicate_policies(self):
