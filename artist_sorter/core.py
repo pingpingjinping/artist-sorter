@@ -19,7 +19,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 ID_TOKEN = re.compile(r"(?<!\d)(\d{4,10})(?!\d)")
 UNKNOWN_ARTIST_FOLDER = "기타"
-MAX_FILENAME_UTF8_BYTES = 220
+MAX_FILENAME_UTF8_BYTES = 200
 
 DuplicatePolicy = Literal["skip", "rename", "overwrite"]
 
