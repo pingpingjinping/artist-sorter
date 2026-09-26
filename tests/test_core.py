@@ -203,6 +203,66 @@ class CoreTests(unittest.TestCase):
             )
             self.assertEqual(item.status, "준비")
 
+    def test_emoji_only_titles_fall_back_to_id_filename(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(
+                db_path,
+                [
+                    (3469671, "🦝", "|alice|"),
+                    (4039448, "♨️🚺🍄", "|alice|"),
+                ],
+            )
+            source = root / "downloads"
+            source.mkdir()
+            (source / "3469671.zip").write_bytes(b"x")
+            (source / "4039448.zip").write_bytes(b"x")
+            output = root / "sorted"
+
+            plan = make_plan(
+                source,
+                output,
+                db_path,
+                add_title_to_filename=True,
+            )
+            by_id = {item.gallery_id: item for item in plan}
+            self.assertEqual(
+                by_id[3469671].destination.name,
+                "3469671.zip",
+            )
+            self.assertEqual(
+                by_id[4039448].destination.name,
+                "4039448.zip",
+            )
+
+    def test_title_filename_is_capped_by_utf8_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(
+                db_path,
+                [(4999999, "가" * 200, "|alice|")],
+            )
+            source = root / "downloads"
+            source.mkdir()
+            (source / "4999999.zip").write_bytes(b"x")
+            output = root / "sorted"
+
+            plan = make_plan(
+                source,
+                output,
+                db_path,
+                add_title_to_filename=True,
+            )
+            name = plan[0].destination.name
+            self.assertLessEqual(
+                len(name.encode("utf-8")),
+                200,
+            )
+            self.assertTrue(name.startswith("4999999 ("))
+            self.assertTrue(name.endswith(").zip"))
+
     def test_archive_files_are_sorted_without_extracting(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
