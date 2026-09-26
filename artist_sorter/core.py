@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import urllib.request
 import uuid
+import unicodedata
 from contextlib import closing
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -18,6 +19,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 INVALID_WINDOWS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 ID_TOKEN = re.compile(r"(?<!\d)(\d{4,10})(?!\d)")
 UNKNOWN_ARTIST_FOLDER = "기타"
+MAX_FILENAME_UTF8_BYTES = 220
 
 DuplicatePolicy = Literal["skip", "rename", "overwrite"]
 
@@ -111,6 +113,34 @@ def choose_artist_folder(
     return sanitize_windows_name(artists[0])
 
 
+def _strip_emoji_symbols(value: str) -> str:
+    cleaned: list[str] = []
+    for ch in value:
+        code = ord(ch)
+        if unicodedata.category(ch) == "So":
+            continue
+        if code in {0x200D, 0xFE0E, 0xFE0F}:
+            continue
+        if 0x1F3FB <= code <= 0x1F3FF:
+            continue
+        cleaned.append(ch)
+    return "".join(cleaned)
+
+
+def _truncate_utf8(value: str, max_bytes: int) -> str:
+    if max_bytes <= 0:
+        return ""
+    used = 0
+    chars: list[str] = []
+    for ch in value:
+        size = len(ch.encode("utf-8"))
+        if used + size > max_bytes:
+            break
+        chars.append(ch)
+        used += size
+    return "".join(chars).rstrip(" .")
+
+
 def make_destination_name(
     source: Path,
     gallery_id: int,
@@ -120,12 +150,25 @@ def make_destination_name(
     if not add_title_to_filename or not source.is_file() or not title.strip():
         return source.name
 
-    safe_title = sanitize_windows_name(title, fallback="")
-    if not safe_title:
-        return source.name
-
     suffix = source.suffix
-    return f"{gallery_id} ({safe_title}){suffix}"
+    safe_title = sanitize_windows_name(title, fallback="")
+    safe_title = _strip_emoji_symbols(safe_title)
+    safe_title = re.sub(r"\s+", " ", safe_title).strip().rstrip(".")
+
+    if not safe_title:
+        return f"{gallery_id}{suffix}"
+
+    prefix = f"{gallery_id} ("
+    ending = f"){suffix}"
+    title_budget = (
+        MAX_FILENAME_UTF8_BYTES
+        - len(prefix.encode("utf-8"))
+        - len(ending.encode("utf-8"))
+    )
+    safe_title = _truncate_utf8(safe_title, title_budget)
+    if not safe_title:
+        return f"{gallery_id}{suffix}"
+    return f"{prefix}{safe_title}{ending}"
 
 
 def _is_same_or_child(path: Path, parent: Path) -> bool:
