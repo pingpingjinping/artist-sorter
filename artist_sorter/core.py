@@ -111,6 +111,23 @@ def choose_artist_folder(
     return sanitize_windows_name(artists[0])
 
 
+def make_destination_name(
+    source: Path,
+    gallery_id: int,
+    title: str,
+    add_title_to_filename: bool,
+) -> str:
+    if not add_title_to_filename or not source.is_file() or not title.strip():
+        return source.name
+
+    safe_title = sanitize_windows_name(title, fallback="")
+    if not safe_title:
+        return source.name
+
+    suffix = source.suffix
+    return f"{gallery_id} ({safe_title}){suffix}"
+
+
 def _is_same_or_child(path: Path, parent: Path) -> bool:
     try:
         path.resolve().relative_to(parent.resolve())
@@ -263,6 +280,7 @@ def make_plan(
     recursive: bool = False,
     duplicate_policy: DuplicatePolicy = "skip",
     exclude_paths: Iterable[Path] = (),
+    add_title_to_filename: bool = False,
 ) -> list[PlanItem]:
     if duplicate_policy not in {"skip", "rename", "overwrite"}:
         raise ValueError(f"지원하지 않는 중복 처리 방식: {duplicate_policy}")
@@ -320,7 +338,13 @@ def make_plan(
             else:
                 folder = UNKNOWN_ARTIST_FOLDER
 
-        desired = output_dir / folder / item.source.name
+        destination_name = make_destination_name(
+            item.source,
+            item.gallery_id,
+            title,
+            add_title_to_filename,
+        )
+        desired = output_dir / folder / destination_name
         desired_key = _destination_key(desired)
 
         def with_db_state(status: str) -> str:

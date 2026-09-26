@@ -82,6 +82,9 @@ class ArtistSorterApp(tk.Tk):
         self.recursive_var = tk.BooleanVar(
             value=bool(self.config_data.get("recursive", False))
         )
+        self.add_title_var = tk.BooleanVar(
+            value=bool(self.config_data.get("add_title_to_filename", True))
+        )
         self.duplicate_var = tk.StringVar(value=duplicate_label)
         self.db_status_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="준비됨")
@@ -193,6 +196,12 @@ class ArtistSorterApp(tk.Tk):
             variable=self.recursive_var,
             command=self._invalidate_plan,
         ).pack(side="left")
+        ttk.Checkbutton(
+            options2,
+            text="파일명에 작품명 추가",
+            variable=self.add_title_var,
+            command=self._invalidate_plan,
+        ).pack(side="left", padx=(12, 0))
         ttk.Separator(options2, orient="vertical").pack(
             side="left", fill="y", padx=12
         )
@@ -455,6 +464,7 @@ class ArtistSorterApp(tk.Tk):
         strategy = self.artist_strategy_var.get()
         recursive = self.recursive_var.get()
         duplicate_policy = self._duplicate_policy()
+        add_title_to_filename = self.add_title_var.get()
         exclude_paths = self._scan_exclude_paths()
 
         self._set_busy(True, "스캔 중...")
@@ -468,6 +478,7 @@ class ArtistSorterApp(tk.Tk):
                 recursive,
                 duplicate_policy,
                 exclude_paths,
+                add_title_to_filename,
             ),
             daemon=True,
         ).start()
@@ -481,6 +492,7 @@ class ArtistSorterApp(tk.Tk):
         recursive: bool,
         duplicate_policy: str,
         exclude_paths: list[Path],
+        add_title_to_filename: bool,
     ) -> None:
         try:
             plan = make_plan(
@@ -491,6 +503,7 @@ class ArtistSorterApp(tk.Tk):
                 recursive=recursive,
                 duplicate_policy=duplicate_policy,
                 exclude_paths=exclude_paths,
+                add_title_to_filename=add_title_to_filename,
             )
             self.events.put(("preview_done", plan))
         except Exception as exc:
@@ -740,6 +753,7 @@ class ArtistSorterApp(tk.Tk):
             "mode": self.mode_var.get(),
             "artist_strategy": self.artist_strategy_var.get(),
             "recursive": self.recursive_var.get(),
+            "add_title_to_filename": self.add_title_var.get(),
             "duplicate_policy": self._duplicate_policy(),
         }
         if self.db_server_version is not None:

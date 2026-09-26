@@ -119,6 +119,90 @@ class CoreTests(unittest.TestCase):
             )
             self.assertEqual(plan[0].status, "준비")
 
+    def test_add_title_to_filename_for_files_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(
+                db_path,
+                [
+                    (
+                        4192094,
+                        'Sample: Title / Test?',
+                        "|alice|",
+                    ),
+                    (
+                        4192095,
+                        "Folder Title",
+                        "|alice|",
+                    ),
+                ],
+            )
+
+            source = root / "downloads"
+            source.mkdir()
+            archive = source / "4192094.zip"
+            archive.write_bytes(b"archive")
+            folder = source / "4192095"
+            folder.mkdir()
+            output = root / "sorted"
+
+            plan = make_plan(
+                source,
+                output,
+                db_path,
+                add_title_to_filename=True,
+            )
+            by_id = {item.gallery_id: item for item in plan}
+
+            self.assertEqual(
+                by_id[4192094].destination.name,
+                "4192094 (Sample_ Title _ Test_).zip",
+            )
+            self.assertEqual(
+                by_id[4192095].destination.name,
+                "4192095",
+            )
+
+    def test_title_rename_can_reprocess_existing_sorted_tree(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db_path = root / "data.db"
+            make_db(
+                db_path,
+                [(7777777, "Existing Work", "|alice|")],
+            )
+
+            existing = (
+                root
+                / "artist"
+                / "alice"
+                / "7777777.zip"
+            )
+            existing.parent.mkdir(parents=True)
+            existing.write_bytes(b"x")
+
+            plan = make_plan(
+                root,
+                root,
+                db_path,
+                recursive=True,
+                add_title_to_filename=True,
+            )
+            item = next(
+                x for x in plan if x.gallery_id == 7777777
+            )
+            self.assertEqual(
+                item.destination,
+                (
+                    root
+                    / "artist"
+                    / "alice"
+                    / "7777777 (Existing Work).zip"
+                ).resolve(),
+            )
+            self.assertEqual(item.status, "준비")
+
     def test_archive_files_are_sorted_without_extracting(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
