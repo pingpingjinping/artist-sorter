@@ -258,7 +258,7 @@ class CoreTests(unittest.TestCase):
             name = plan[0].destination.name
             self.assertLessEqual(
                 len(name.encode("utf-8")),
-                220,
+                200,
             )
             self.assertTrue(name.startswith("4999999 ("))
             self.assertTrue(name.endswith(").zip"))
